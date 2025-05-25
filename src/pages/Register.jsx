@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import AuthLayout from '../layouts/AuthLayout'
 import Button from '../components/ui/Button'
@@ -8,6 +8,7 @@ import Alert from '../components/ui/Alert'
 
 export default function Register() {
     const { register } = useAuth()
+    const navigate = useNavigate()
     const [formData, setFormData] = useState({
         email: '',
         password: '',
@@ -38,6 +39,13 @@ export default function Register() {
             const result = await register(formData.email, formData.password)
             if (!result.success) {
                 setError(result.error)
+            } else {
+                navigate('/login', { 
+                    state: { 
+                        message: 'Registration successful! Please login with your new account.',
+                        type: 'success'
+                    }
+                })
             }
         } catch (err) {
             setError('Failed to create an account')

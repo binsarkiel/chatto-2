@@ -9,7 +9,7 @@ export default function AppLayout({ children }) {
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
                     <div className="flex items-center">
                         <h1 className="text-xl font-semibold text-gray-900">
-                            Hello, <span className="text-blue-600">{user.email}</span>
+                            Hi, <span className="text-blue-600">{user.email}</span>
                         </h1>
                     </div>
                     <div className="flex items-center space-x-4">

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import AuthLayout from '../layouts/AuthLayout'
 import Button from '../components/ui/Button'
@@ -8,12 +8,17 @@ import Alert from '../components/ui/Alert'
 
 export default function Login() {
     const { login } = useAuth()
+    const location = useLocation()
     const [formData, setFormData] = useState({
         email: '',
         password: ''
     })
     const [error, setError] = useState('')
     const [loading, setLoading] = useState(false)
+
+    // Get success message from navigation state if it exists
+    const successMessage = location.state?.message
+    const messageType = location.state?.type || 'error'
 
     const handleChange = (e) => {
         const { name, value } = e.target
@@ -42,7 +47,10 @@ export default function Login() {
 
     return (
         <AuthLayout title="Sign in to your account">
-            <Alert message={error} />
+            <Alert 
+                message={successMessage || error} 
+                type={successMessage ? messageType : 'error'} 
+            />
             <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
                 <div className="rounded-md shadow-sm space-y-4">
                     <Input
