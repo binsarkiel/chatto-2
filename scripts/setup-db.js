@@ -1,27 +1,8 @@
-import pg from 'pg'
-import dotenv from 'dotenv'
-import { fileURLToPath } from 'url'
-import { dirname } from 'path'
-
-dotenv.config()
-
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = dirname(__filename)
-
-const { Pool } = pg
-
-const pool = new Pool({
-    host: process.env.DB_HOST || 'localhost',
-    port: process.env.DB_PORT || 5432,
-    user: process.env.DB_USER || 'postgres',
-    password: process.env.DB_PASSWORD || 'postgres',
-    database: process.env.DB_NAME || 'chatto'
-})
+import { query } from '../server/db.js'
 
 const setupDatabase = async () => {
     try {
-        // Create tables
-        await pool.query(`
+        await query(`
             CREATE TABLE IF NOT EXISTS users (
                 id SERIAL PRIMARY KEY,
                 email VARCHAR(255) UNIQUE NOT NULL,
@@ -55,11 +36,10 @@ const setupDatabase = async () => {
         `)
 
         console.log('Database setup completed successfully!')
+        process.exit(0)
     } catch (error) {
         console.error('Error setting up database:', error)
         process.exit(1)
-    } finally {
-        await pool.end()
     }
 }
 

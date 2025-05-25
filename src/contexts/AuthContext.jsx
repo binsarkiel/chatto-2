@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { auth as authService } from '../services/api'
 
 const AuthContext = createContext(null)
 
@@ -9,29 +10,22 @@ export const AuthProvider = ({ children }) => {
     const navigate = useNavigate()
 
     useEffect(() => {
-        // Check if user is logged in on mount
         const token = localStorage.getItem('token')
         if (token) {
-            // Verify token and set user
-            fetch('/api/auth/verify', {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
-            })
-            .then(res => res.json())
-            .then(data => {
-                if (data.user) {
-                    setUser(data.user)
-                } else {
+            authService.verify(token)
+                .then(data => {
+                    if (data.success) {
+                        setUser(data.user)
+                    } else {
+                        localStorage.removeItem('token')
+                    }
+                })
+                .catch(() => {
                     localStorage.removeItem('token')
-                }
-            })
-            .catch(() => {
-                localStorage.removeItem('token')
-            })
-            .finally(() => {
-                setLoading(false)
-            })
+                })
+                .finally(() => {
+                    setLoading(false)
+                })
         } else {
             setLoading(false)
         }
@@ -39,23 +33,15 @@ export const AuthProvider = ({ children }) => {
 
     const login = async (email, password) => {
         try {
-            const res = await fetch('/api/auth/login', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ email, password })
-            })
-            const data = await res.json()
+            const data = await authService.login(email, password)
             
-            if (data.token) {
+            if (data.success) {
                 localStorage.setItem('token', data.token)
                 setUser(data.user)
                 navigate('/chat')
-                return { success: true }
-            } else {
-                return { success: false, error: data.message }
             }
+            
+            return data
         } catch (error) {
             return { success: false, error: 'An error occurred during login' }
         }
@@ -63,21 +49,13 @@ export const AuthProvider = ({ children }) => {
 
     const register = async (email, password) => {
         try {
-            const res = await fetch('/api/auth/register', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ email, password })
-            })
-            const data = await res.json()
+            const data = await authService.register(email, password)
             
             if (data.success) {
                 navigate('/login')
-                return { success: true }
-            } else {
-                return { success: false, error: data.message }
             }
+            
+            return data
         } catch (error) {
             return { success: false, error: 'An error occurred during registration' }
         }

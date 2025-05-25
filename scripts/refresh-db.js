@@ -1,22 +1,9 @@
-import pg from 'pg'
-import dotenv from 'dotenv'
-
-dotenv.config()
-
-const { Pool } = pg
-
-const pool = new Pool({
-    host: process.env.DB_HOST || 'localhost',
-    port: process.env.DB_PORT || 5432,
-    user: process.env.DB_USER || 'postgres',
-    password: process.env.DB_PASSWORD || 'postgres',
-    database: process.env.DB_NAME || 'chatto'
-})
+import { query } from '../server/db.js'
 
 const refreshDatabase = async () => {
     try {
         // Drop all tables
-        await pool.query(`
+        await query(`
             DROP TABLE IF EXISTS chat_participants CASCADE;
             DROP TABLE IF EXISTS chats CASCADE;
             DROP TABLE IF EXISTS sessions CASCADE;
@@ -24,7 +11,7 @@ const refreshDatabase = async () => {
         `)
 
         // Recreate tables
-        await pool.query(`
+        await query(`
             CREATE TABLE users (
                 id SERIAL PRIMARY KEY,
                 email VARCHAR(255) UNIQUE NOT NULL,
@@ -58,11 +45,10 @@ const refreshDatabase = async () => {
         `)
 
         console.log('Database refreshed successfully!')
+        process.exit(0)
     } catch (error) {
         console.error('Error refreshing database:', error)
         process.exit(1)
-    } finally {
-        await pool.end()
     }
 }
 

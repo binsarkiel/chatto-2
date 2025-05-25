@@ -1,6 +1,10 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import AuthLayout from '../layouts/AuthLayout'
+import Button from '../components/ui/Button'
+import Input from '../components/ui/Input'
+import Alert from '../components/ui/Alert'
 
 export default function Register() {
     const { register } = useAuth()
@@ -24,7 +28,6 @@ export default function Register() {
         e.preventDefault()
         setError('')
 
-        // Validate passwords match
         if (formData.password !== formData.confirmPassword) {
             setError('Passwords do not match')
             return
@@ -44,85 +47,57 @@ export default function Register() {
     }
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50">
-            <div className="max-w-md w-full space-y-8 p-8 bg-white rounded-lg shadow">
-                <div>
-                    <Link to="/">
-                        <h2 className="mt-6 text-center text-4xl font-extrabold text-blue-600">
-                            Chatto
-                        </h2>
-                    </Link>
-                    <h2 className="mt-6 text-center text-2xl font-extrabold text-gray-900">
-                        Create your account
-                    </h2>
+        <AuthLayout title="Create your account">
+            <Alert message={error} />
+            <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+                <div className="rounded-md shadow-sm space-y-4">
+                    <Input
+                        id="email"
+                        name="email"
+                        type="email"
+                        required
+                        placeholder="Email address"
+                        value={formData.email}
+                        onChange={handleChange}
+                    />
+                    <Input
+                        id="password"
+                        name="password"
+                        type="password"
+                        required
+                        placeholder="Password"
+                        value={formData.password}
+                        onChange={handleChange}
+                    />
+                    <Input
+                        id="confirmPassword"
+                        name="confirmPassword"
+                        type="password"
+                        required
+                        placeholder="Confirm Password"
+                        value={formData.confirmPassword}
+                        onChange={handleChange}
+                    />
                 </div>
-                {error && (
-                    <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded relative" role="alert">
-                        <span className="block sm:inline">{error}</span>
-                    </div>
-                )}
-                <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-                    <div className="rounded-md shadow-sm space-y-4">
-                        <div>
-                            <label htmlFor="email" className="sr-only">Email address</label>
-                            <input
-                                id="email"
-                                name="email"
-                                type="email"
-                                required
-                                className="appearance-none rounded-md relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                                placeholder="Email address"
-                                value={formData.email}
-                                onChange={handleChange}
-                            />
-                        </div>
-                        <div>
-                            <label htmlFor="password" className="sr-only">Password</label>
-                            <input
-                                id="password"
-                                name="password"
-                                type="password"
-                                required
-                                className="appearance-none rounded-md relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                                placeholder="Password"
-                                value={formData.password}
-                                onChange={handleChange}
-                            />
-                        </div>
-                        <div>
-                            <label htmlFor="confirmPassword" className="sr-only">Confirm Password</label>
-                            <input
-                                id="confirmPassword"
-                                name="confirmPassword"
-                                type="password"
-                                required
-                                className="appearance-none rounded-md relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                                placeholder="Confirm Password"
-                                value={formData.confirmPassword}
-                                onChange={handleChange}
-                            />
-                        </div>
-                    </div>
 
-                    <div>
-                        <button
-                            type="submit"
-                            disabled={loading}
-                            className={`group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white ${loading ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'} focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500`}
-                        >
-                            {loading ? 'Signing up...' : 'Sign up'}
-                        </button>
-                    </div>
-                </form>
-                <div className="text-center">
-                    <p className="text-sm text-gray-600">
-                        Already have an account?{' '}
-                        <Link to="/login" className="font-medium text-blue-600 hover:text-blue-500">
-                            Login here
-                        </Link>
-                    </p>
+                <div>
+                    <Button
+                        type="submit"
+                        disabled={loading}
+                        className="w-full"
+                    >
+                        {loading ? 'Signing up...' : 'Sign up'}
+                    </Button>
                 </div>
+            </form>
+            <div className="text-center">
+                <p className="text-sm text-gray-600">
+                    Already have an account?{' '}
+                    <Link to="/login" className="font-medium text-blue-600 hover:text-blue-500">
+                        Login here
+                    </Link>
+                </p>
             </div>
-        </div>
+        </AuthLayout>
     )
 } 
