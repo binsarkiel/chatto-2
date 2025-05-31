@@ -36,7 +36,7 @@ export default function Login() {
             setLoading(true)
             const result = await login(formData.email, formData.password)
             if (!result.success) {
-                setError(result.error)
+                setError(result.message || 'Invalid credentials')
             }
         } catch (err) {
             setError('Failed to sign in')

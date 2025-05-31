@@ -38,7 +38,7 @@ export default function Register() {
             setLoading(true)
             const result = await register(formData.email, formData.password)
             if (!result.success) {
-                setError(result.error)
+                setError(result.message || 'An error occurred during registration')
             } else {
                 navigate('/login', { 
                     state: { 

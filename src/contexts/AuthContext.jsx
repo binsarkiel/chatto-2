@@ -43,7 +43,7 @@ export const AuthProvider = ({ children }) => {
             
             return data
         } catch (error) {
-            return { success: false, error: 'An error occurred during login' }
+            return { success: false, message: 'An error occurred during login' }
         }
     }
 
@@ -57,7 +57,7 @@ export const AuthProvider = ({ children }) => {
             
             return data
         } catch (error) {
-            return { success: false, error: 'An error occurred during registration' }
+            return { success: false, message: 'An error occurred during registration' }
         }
     }
 
