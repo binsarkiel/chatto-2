@@ -7,7 +7,9 @@ import {
     getChatMessages,
     searchMessages,
     searchUsers,
-    sendMessage
+    sendMessage,
+    addGroupMember,
+    removeGroupMember
 } from '../controllers/chat.controller.js'
 
 const router = Router()
@@ -19,6 +21,10 @@ router.post('/direct', createDirectMessage)
 router.post('/group', createGroupChat)
 router.get('/:id/messages', getChatMessages)
 router.post('/:id/messages', sendMessage)
+
+// Group member management
+router.post('/group/:chatId/members', addGroupMember)
+router.delete('/group/:chatId/members/:userId', removeGroupMember)
 
 // Search routes
 router.get('/search/messages', searchMessages)

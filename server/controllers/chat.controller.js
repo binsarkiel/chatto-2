@@ -492,4 +492,149 @@ export const sendMessage = async (req, res) => {
         console.error('Error sending message:', error)
         res.status(500).json({ message: 'Failed to send message' })
     }
+}
+
+export const addGroupMember = async (req, res) => {
+    try {
+        const { chatId } = req.params
+        const { userId } = req.body
+
+        // Verify the chat exists and is a group chat
+        const chatCheck = await query(`
+            SELECT is_group FROM chats WHERE id = $1
+        `, [chatId])
+
+        if (chatCheck.rows.length === 0) {
+            return res.status(404).json({ message: 'Chat not found' })
+        }
+
+        if (!chatCheck.rows[0].is_group) {
+            return res.status(400).json({ message: 'Cannot add members to non-group chat' })
+        }
+
+        // Verify the requester is a member of the group
+        const memberCheck = await query(`
+            SELECT 1 FROM chat_participants WHERE chat_id = $1 AND user_id = $2
+        `, [chatId, req.user.id])
+
+        if (memberCheck.rows.length === 0) {
+            return res.status(403).json({ message: 'Not authorized to modify this chat' })
+        }
+
+        // Check if user exists
+        const userCheck = await query('SELECT 1 FROM users WHERE id = $1', [userId])
+        if (userCheck.rows.length === 0) {
+            return res.status(404).json({ message: 'User not found' })
+        }
+
+        // Check if user is already a member
+        const existingMember = await query(`
+            SELECT 1 FROM chat_participants WHERE chat_id = $1 AND user_id = $2
+        `, [chatId, userId])
+
+        if (existingMember.rows.length > 0) {
+            return res.status(400).json({ message: 'User is already a member' })
+        }
+
+        // Add the new member
+        await query(
+            'INSERT INTO chat_participants (chat_id, user_id) VALUES ($1, $2)',
+            [chatId, userId]
+        )
+
+        // Get updated chat data
+        const result = await query(`
+            SELECT c.*, 
+                   c.name as display_name,
+                   (
+                       SELECT json_agg(json_build_object('id', u.id, 'email', u.email))
+                       FROM users u
+                       JOIN chat_participants cp ON u.id = cp.user_id
+                       WHERE cp.chat_id = c.id
+                   ) as participants
+            FROM chats c
+            WHERE c.id = $1
+        `, [chatId])
+
+        const updatedChat = result.rows[0]
+
+        // Notify all participants about the update
+        const io = getIO()
+        updatedChat.participants.forEach(participant => {
+            io.to(`user:${participant.id}`).emit('chat_updated', updatedChat)
+        })
+
+        // Send join chat event to new member
+        io.to(`user:${userId}`).emit('new_chat', updatedChat)
+        io.to(`user:${userId}`).emit('join_new_chat', { chat_id: chatId })
+
+        res.json(updatedChat)
+    } catch (error) {
+        console.error('Error adding group member:', error)
+        res.status(500).json({ message: 'Failed to add member to group' })
+    }
+}
+
+export const removeGroupMember = async (req, res) => {
+    try {
+        const { chatId, userId } = req.params
+
+        // Verify the chat exists and is a group chat
+        const chatCheck = await query(`
+            SELECT is_group FROM chats WHERE id = $1
+        `, [chatId])
+
+        if (chatCheck.rows.length === 0) {
+            return res.status(404).json({ message: 'Chat not found' })
+        }
+
+        if (!chatCheck.rows[0].is_group) {
+            return res.status(400).json({ message: 'Cannot remove members from non-group chat' })
+        }
+
+        // Verify the requester is a member of the group
+        const memberCheck = await query(`
+            SELECT 1 FROM chat_participants WHERE chat_id = $1 AND user_id = $2
+        `, [chatId, req.user.id])
+
+        if (memberCheck.rows.length === 0) {
+            return res.status(403).json({ message: 'Not authorized to modify this chat' })
+        }
+
+        // Remove the member
+        await query(
+            'DELETE FROM chat_participants WHERE chat_id = $1 AND user_id = $2',
+            [chatId, userId]
+        )
+
+        // Get updated chat data
+        const result = await query(`
+            SELECT c.*, 
+                   c.name as display_name,
+                   (
+                       SELECT json_agg(json_build_object('id', u.id, 'email', u.email))
+                       FROM users u
+                       JOIN chat_participants cp ON u.id = cp.user_id
+                       WHERE cp.chat_id = c.id
+                   ) as participants
+            FROM chats c
+            WHERE c.id = $1
+        `, [chatId])
+
+        const updatedChat = result.rows[0]
+
+        // Notify remaining participants about the update
+        const io = getIO()
+        updatedChat.participants.forEach(participant => {
+            io.to(`user:${participant.id}`).emit('chat_updated', updatedChat)
+        })
+
+        // Notify removed user
+        io.to(`user:${userId}`).emit('removed_from_chat', { chatId })
+
+        res.json(updatedChat)
+    } catch (error) {
+        console.error('Error removing group member:', error)
+        res.status(500).json({ message: 'Failed to remove member from group' })
+    }
 } 

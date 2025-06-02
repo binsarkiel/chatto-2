@@ -3,7 +3,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useSocket } from '../../contexts/SocketContext'
 import chatService from '../../services/chatService'
 import { HiUserGroup, HiDotsVertical } from 'react-icons/hi'
-import { FaUser } from 'react-icons/fa'
+import { FaUser, FaUserPlus, FaUserMinus } from 'react-icons/fa'
 import Loading from '../ui/Loading'
 
 export default function ChatWindow({ chat, messages: initialMessages = [], typingUsers = {}, onUpdateChat }) {
@@ -13,14 +13,20 @@ export default function ChatWindow({ chat, messages: initialMessages = [], typin
     const [isTyping, setIsTyping] = useState(false)
     const [messages, setMessages] = useState(initialMessages || [])
     const [showParticipants, setShowParticipants] = useState(false)
+    const [showGroupMenu, setShowGroupMenu] = useState(false)
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState('')
     const [page, setPage] = useState(1)
     const [hasMore, setHasMore] = useState(true)
+    const [showAddMember, setShowAddMember] = useState(false)
+    const [searchTerm, setSearchTerm] = useState('')
+    const [searchResults, setSearchResults] = useState([])
+    const [searching, setSearching] = useState(false)
     const messagesEndRef = useRef(null)
     const typingTimeoutRef = useRef(null)
     const messagesContainerRef = useRef(null)
     const [initialLoad, setInitialLoad] = useState(true)
+    const menuRef = useRef(null)
 
     useEffect(() => {
         setMessages(initialMessages)
@@ -119,19 +125,73 @@ export default function ChatWindow({ chat, messages: initialMessages = [], typin
         }
     }
 
-    const handleRemoveMember = async (memberId) => {
+    const handleAddMember = async (userId) => {
         try {
-            await chatService.removeGroupMember(chat.id, memberId)
-            // Update the chat participants locally
-            onUpdateChat(chat.id, null, {
-                ...chat,
-                participants: chat.participants.filter(p => p.id !== memberId)
-            })
+            setLoading(true)
+            const updatedChat = await chatService.addGroupMember(chat.id, userId)
+            onUpdateChat(updatedChat)
+            setShowAddMember(false)
+            setSearchTerm('')
         } catch (error) {
-            console.error('Failed to remove member:', error)
-            setError('Failed to remove member')
+            setError('Failed to add member')
+            console.error('Error adding member:', error)
+        } finally {
+            setLoading(false)
         }
     }
+
+    const handleRemoveMember = async (userId) => {
+        try {
+            setLoading(true)
+            const updatedChat = await chatService.removeGroupMember(chat.id, userId)
+            onUpdateChat(updatedChat)
+        } catch (error) {
+            setError('Failed to remove member')
+            console.error('Error removing member:', error)
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    // Close menus when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (menuRef.current && !menuRef.current.contains(event.target)) {
+                setShowGroupMenu(false)
+                setShowAddMember(false)
+            }
+        }
+
+        document.addEventListener('mousedown', handleClickOutside)
+        return () => document.removeEventListener('mousedown', handleClickOutside)
+    }, [])
+
+    // Search users for adding to group
+    useEffect(() => {
+        if (!showAddMember || !searchTerm.trim()) {
+            setSearchResults([])
+            return
+        }
+
+        const searchUsers = async () => {
+            setSearching(true)
+            try {
+                const results = await chatService.searchUsers(searchTerm)
+                // Filter out current participants
+                setSearchResults(results.filter(u => 
+                    !chat.participants.some(p => p.id === u.id)
+                ))
+            } catch (error) {
+                console.error('Error searching users:', error)
+                setError('Failed to search users')
+            } finally {
+                setSearching(false)
+            }
+        }
+
+        const timeoutId = setTimeout(searchUsers, 300)
+        return () => clearTimeout(timeoutId)
+    }, [searchTerm, showAddMember, chat.participants])
 
     const formatTime = (timestamp) => {
         return new Date(timestamp).toLocaleTimeString('en-US', {
@@ -215,77 +275,148 @@ export default function ChatWindow({ chat, messages: initialMessages = [], typin
     return (
         <div className="h-full flex flex-col bg-white rounded-lg shadow">
             {/* Chat Header */}
-            <div className="px-6 py-4 border-b">
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center">
-                        <div className={`
-                            w-10 h-10 rounded-full flex items-center justify-center
-                            ${chat.is_group ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}
-                        `}>
-                            {chat.is_group ? (
-                                <HiUserGroup className="w-6 h-6" />
-                            ) : (
-                                <FaUser className="w-6 h-6" />
-                            )}
-                        </div>
-                        <div className="ml-4">
-                            <h2 className="text-lg font-semibold text-gray-900">
-                                {chat.is_group ? chat.name : chat.participants.find(p => p.email !== user.email)?.email}
-                            </h2>
-                            <p className="text-sm text-gray-500">
-                                {Object.keys(typingUsers).length > 0
-                                    ? `${Object.keys(typingUsers).join(', ')} typing...`
-                                    : chat.is_group ? `${chat.participants.length} members` : 'Direct Message'
-                                }
-                            </p>
-                        </div>
+            <div className="px-4 py-3 border-b flex items-center justify-between">
+                <div className="flex items-center">
+                    <div className={`
+                        w-10 h-10 rounded-full flex items-center justify-center mr-3
+                        ${chat.is_group ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}
+                    `}>
+                        {chat.is_group ? (
+                            <HiUserGroup className="w-6 h-6" />
+                        ) : (
+                            <div className="w-full h-full rounded-full bg-gray-300 flex items-center justify-center">
+                                <span className="text-white text-lg font-medium">
+                                    {chat.display_name?.[0]?.toUpperCase()}
+                                </span>
+                            </div>
+                        )}
                     </div>
-                    {chat.is_group && (
-                        <div className="relative">
-                            <button
-                                onClick={() => setShowParticipants(!showParticipants)}
-                                className="p-2 rounded-full hover:bg-gray-100"
-                            >
-                                <HiDotsVertical className="w-5 h-5 text-gray-600" />
-                            </button>
-                            {showParticipants && (
-                                <div className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border z-10">
-                                    <div className="p-4">
-                                        <h3 className="text-sm font-medium text-gray-900 mb-3">
-                                            Group Members
-                                        </h3>
-                                        <div className="space-y-2">
-                                            {chat.participants.map(participant => (
-                                                <div
-                                                    key={participant.id}
-                                                    className="flex items-center justify-between"
+                    <div>
+                        <h2 className="text-lg font-semibold">{chat.display_name}</h2>
+                        <p className="text-sm text-gray-500">
+                            {chat.is_group ? `${chat.participants?.length} members` : 'Direct Message'}
+                        </p>
+                    </div>
+                </div>
+                
+                {chat.is_group && (
+                    <div className="relative" ref={menuRef}>
+                        <button
+                            onClick={() => setShowGroupMenu(!showGroupMenu)}
+                            className="p-2 hover:bg-gray-100 rounded-full"
+                        >
+                            <HiDotsVertical className="w-5 h-5" />
+                        </button>
+                        
+                        {showGroupMenu && (
+                            <div className="absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-10">
+                                <div className="py-1">
+                                    <button
+                                        onClick={() => {
+                                            setShowAddMember(true)
+                                            setShowGroupMenu(false)
+                                        }}
+                                        className="w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
+                                    >
+                                        <FaUserPlus className="w-4 h-4 mr-2" />
+                                        Add Member
+                                    </button>
+                                    <button
+                                        onClick={() => setShowParticipants(!showParticipants)}
+                                        className="w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
+                                    >
+                                        <HiUserGroup className="w-4 h-4 mr-2" />
+                                        View Members
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                        
+                        {showAddMember && (
+                            <div className="absolute right-0 mt-2 w-64 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-10">
+                                <div className="p-4">
+                                    <div className="mb-4">
+                                        <input
+                                            type="text"
+                                            value={searchTerm}
+                                            onChange={(e) => setSearchTerm(e.target.value)}
+                                            placeholder="Search users..."
+                                            className="w-full px-3 py-2 border rounded-md"
+                                        />
+                                    </div>
+                                    <div className="max-h-48 overflow-y-auto">
+                                        {searching ? (
+                                            <div className="text-center py-2">
+                                                <Loading />
+                                            </div>
+                                        ) : searchResults.length > 0 ? (
+                                            searchResults.map(user => (
+                                                <button
+                                                    key={user.id}
+                                                    onClick={() => handleAddMember(user.id)}
+                                                    className="w-full px-3 py-2 text-left hover:bg-gray-100 rounded-md flex items-center"
                                                 >
-                                                    <span className="text-sm text-gray-600">
-                                                        {participant.email}
-                                                    </span>
-                                                    {participant.email !== user.email && (
-                                                        <button
-                                                            onClick={() => handleRemoveMember(participant.id)}
-                                                            className="text-xs text-red-600 hover:text-red-800"
-                                                        >
-                                                            Remove
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            ))}
-                                        </div>
+                                                    <FaUser className="w-4 h-4 mr-2" />
+                                                    {user.email}
+                                                </button>
+                                            ))
+                                        ) : searchTerm ? (
+                                            <p className="text-center text-gray-500 py-2">No users found</p>
+                                        ) : (
+                                            <p className="text-center text-gray-500 py-2">Type to search users</p>
+                                        )}
                                     </div>
                                 </div>
-                            )}
-                        </div>
-                    )}
-                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
+
+            {/* Participants Sidebar */}
+            {showParticipants && chat.is_group && (
+                <div className="absolute right-0 top-0 h-full w-64 bg-white border-l shadow-lg">
+                    <div className="p-4">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-lg font-semibold">Members</h3>
+                            <button
+                                onClick={() => setShowParticipants(false)}
+                                className="text-gray-500 hover:text-gray-700"
+                            >
+                                ×
+                            </button>
+                        </div>
+                        <div className="space-y-2">
+                            {chat.participants?.map(participant => (
+                                <div key={participant.id} className="flex items-center justify-between">
+                                    <div className="flex items-center">
+                                        <div className="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center mr-2">
+                                            <span className="text-white text-sm">
+                                                {participant.email[0].toUpperCase()}
+                                            </span>
+                                        </div>
+                                        <span className="text-sm">{participant.email}</span>
+                                    </div>
+                                    {participant.id !== user.id && (
+                                        <button
+                                            onClick={() => handleRemoveMember(participant.id)}
+                                            className="text-red-500 hover:text-red-700"
+                                        >
+                                            <FaUserMinus className="w-4 h-4" />
+                                        </button>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Messages */}
             <div
                 ref={messagesContainerRef}
                 className="flex-1 overflow-y-auto p-6 space-y-4"
+                style={{ marginRight: showParticipants ? '16rem' : '0' }}
             >
                 {loading && (
                     <div className="flex justify-center">

@@ -71,6 +71,27 @@ export default function Chat() {
             })
         })
 
+        // Listen for chat updates (member added/removed)
+        socket.on('chat_updated', (updatedChat) => {
+            console.debug('[Chat] Received chat_updated event:', updatedChat)
+            setChats(prev => prev.map(chat => 
+                chat.id === updatedChat.id ? updatedChat : chat
+            ))
+            // If this is the active chat, update it
+            if (activeChat?.id === updatedChat.id) {
+                setActiveChat(updatedChat)
+            }
+        })
+
+        // Listen for being removed from a chat
+        socket.on('removed_from_chat', ({ chatId }) => {
+            console.debug('[Chat] Removed from chat:', chatId)
+            setChats(prev => prev.filter(chat => chat.id !== chatId))
+            if (activeChat?.id === chatId) {
+                setActiveChat(null)
+            }
+        })
+
         // Listen for join_new_chat event
         socket.on('join_new_chat', ({ chat_id }) => {
             console.debug('[Chat] Received join_new_chat event for chat:', chat_id)
@@ -135,6 +156,8 @@ export default function Chat() {
         return () => {
             console.debug('[Chat] Cleaning up socket event handlers')
             socket.off('new_chat')
+            socket.off('chat_updated')
+            socket.off('removed_from_chat')
             socket.off('join_new_chat')
             socket.off('new_message')
             socket.off('user_typing')
@@ -157,16 +180,29 @@ export default function Chat() {
     }
 
     const handleNewChat = (chat) => {
-        setChats(prev => [chat, ...prev])
+        setChats(prev => {
+            // Check if chat already exists
+            const exists = prev.some(c => c.id === chat.id)
+            if (exists) {
+                // If it exists, move it to the top and update its data
+                return [
+                    chat,
+                    ...prev.filter(c => c.id !== chat.id)
+                ]
+            }
+            // If it's new, add it to the top
+            return [chat, ...prev]
+        })
         handleChatSelect(chat)
     }
 
-    const handleUpdateChat = (chatId, lastMessage) => {
+    const handleUpdateChat = (updatedChat) => {
         setChats(prev => prev.map(chat => 
-            chat.id === chatId 
-                ? { ...chat, lastMessage }
-                : chat
+            chat.id === updatedChat.id ? updatedChat : chat
         ))
+        if (activeChat?.id === updatedChat.id) {
+            setActiveChat(updatedChat)
+        }
     }
 
     if (loading) {

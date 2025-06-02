@@ -48,20 +48,26 @@ class ChatService {
         }
     }
 
-    async addGroupMembers(groupId, memberIds) {
+    async addGroupMember(chatId, userId) {
         try {
-            const response = await this.api.post(`/chats/group/${groupId}/members`, { memberIds })
+            console.debug('[ChatService] Adding member to group:', { chatId, userId })
+            const response = await this.api.post(`/chats/group/${chatId}/members`, { userId })
+            console.debug('[ChatService] Member added to group:', response.data)
             return response.data
         } catch (error) {
+            console.error('[ChatService] Failed to add group member:', error)
             throw this.handleError(error)
         }
     }
 
-    async removeGroupMember(groupId, memberId) {
+    async removeGroupMember(chatId, userId) {
         try {
-            const response = await this.api.delete(`/chats/group/${groupId}/members/${memberId}`)
+            console.debug('[ChatService] Removing member from group:', { chatId, userId })
+            const response = await this.api.delete(`/chats/group/${chatId}/members/${userId}`)
+            console.debug('[ChatService] Member removed from group:', response.data)
             return response.data
         } catch (error) {
+            console.error('[ChatService] Failed to remove group member:', error)
             throw this.handleError(error)
         }
     }
