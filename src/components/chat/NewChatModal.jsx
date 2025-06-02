@@ -23,8 +23,9 @@ export default function NewChatModal({ isOpen, onClose, onChatCreated, isGroup =
             setSearching(true)
             setError('')
             try {
-                const results = await chatService.searchUsers(searchTerm, user.email)
-                setUsers(results)
+                const results = await chatService.searchUsers(searchTerm)
+                // Filter out the current user from results
+                setUsers(results.filter(u => u.email !== user.email))
             } catch (error) {
                 setError('Failed to search users')
                 console.error('Error searching users:', error)
@@ -37,32 +38,47 @@ export default function NewChatModal({ isOpen, onClose, onChatCreated, isGroup =
         return () => clearTimeout(timeoutId)
     }, [searchTerm, user.email])
 
-    const handleCreateChat = async () => {
+    const handleCreateChat = async (e) => {
+        e.preventDefault()
         if (loading) return
-        if (!selectedUsers.length) return
+        if (!selectedUsers.length) {
+            setError('Please select at least one user')
+            return
+        }
 
         setLoading(true)
         setError('')
+        
         try {
             let newChat
             if (isGroup) {
                 if (!groupName.trim()) {
                     setError('Group name is required')
+                    setLoading(false)
                     return
                 }
+                console.debug('[Chat] Creating group chat:', {
+                    name: groupName.trim(),
+                    participants: selectedUsers.map(u => ({ id: u.id, email: u.email }))
+                })
                 newChat = await chatService.createGroupChat(
-                    groupName,
-                    selectedUsers.map(u => u.id),
-                    user.email
+                    groupName.trim(),
+                    selectedUsers.map(u => u.id)
                 )
+                console.debug('[Chat] Group chat created:', newChat)
             } else {
-                newChat = await chatService.createChat(selectedUsers[0].id, user.email)
+                console.debug('[Chat] Creating direct message:', {
+                    participant: selectedUsers[0]
+                })
+                newChat = await chatService.createDirectMessage(selectedUsers[0].id)
+                console.debug('[Chat] Direct message created:', newChat)
             }
+            
             onChatCreated(newChat)
             handleClose()
         } catch (error) {
-            setError('Failed to create chat')
-            console.error('Error creating chat:', error)
+            console.error('[Chat] Error creating chat:', error)
+            setError(error.message || 'Failed to create chat')
         } finally {
             setLoading(false)
         }
@@ -73,6 +89,7 @@ export default function NewChatModal({ isOpen, onClose, onChatCreated, isGroup =
         setUsers([])
         setSelectedUsers([])
         setGroupName('')
+        setError('')
         onClose()
     }
 
@@ -85,21 +102,22 @@ export default function NewChatModal({ isOpen, onClose, onChatCreated, isGroup =
             )
         } else {
             setSelectedUsers([user])
-            handleCreateChat()
+            // Don't automatically create chat for direct messages
+            // Let the user confirm with the create button
         }
     }
 
     if (!isOpen) return null
 
     return (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center">
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
                 <div className="flex justify-between items-center mb-4">
                     <h2 className="text-xl font-semibold">
                         {isGroup ? 'Create Group Chat' : 'New Chat'}
                     </h2>
                     <button
-                        onClick={onClose}
+                        onClick={handleClose}
                         className="text-gray-400 hover:text-gray-600"
                     >
                         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -132,65 +150,73 @@ export default function NewChatModal({ isOpen, onClose, onChatCreated, isGroup =
 
                     <div className="mb-4">
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                            {isGroup ? 'Add Participants' : 'User Email'}
+                            {isGroup ? 'Add Participants' : 'Select User'}
                         </label>
                         <input
                             type="text"
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                             className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            placeholder="Search users..."
+                            placeholder="Search users by email..."
                         />
                     </div>
 
-                    {selectedUsers.length > 0 && isGroup && (
-                        <div className="mb-4 flex flex-wrap gap-2">
-                            {selectedUsers.map(user => (
-                                <span
-                                    key={user.id}
-                                    className="bg-blue-100 text-blue-800 text-sm px-2 py-1 rounded-full flex items-center"
-                                >
-                                    {user.email}
-                                    <button
-                                        onClick={() => toggleUserSelection(user)}
-                                        className="ml-1 text-blue-600 hover:text-blue-800"
+                    {/* Selected Users */}
+                    {selectedUsers.length > 0 && (
+                        <div className="mb-4">
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Selected {isGroup ? 'Participants' : 'User'}
+                            </label>
+                            <div className="flex flex-wrap gap-2">
+                                {selectedUsers.map(user => (
+                                    <span
+                                        key={user.id}
+                                        className="bg-blue-100 text-blue-800 text-sm px-2 py-1 rounded-full flex items-center"
                                     >
-                                        ×
-                                    </button>
-                                </span>
-                            ))}
+                                        {user.email}
+                                        <button
+                                            type="button"
+                                            onClick={() => toggleUserSelection(user)}
+                                            className="ml-1 text-blue-600 hover:text-blue-800"
+                                        >
+                                            ×
+                                        </button>
+                                    </span>
+                                ))}
+                            </div>
                         </div>
                     )}
 
-                    <div className="max-h-60 overflow-y-auto">
-                        {searching ? (
-                            <div className="text-center py-4 text-gray-500">
-                                Searching...
-                            </div>
-                        ) : users.length > 0 ? (
-                            <div className="space-y-2">
+                    {/* Search Results */}
+                    {searching ? (
+                        <div className="flex justify-center py-4">
+                            <Loading />
+                        </div>
+                    ) : users.length > 0 && (
+                        <div className="mb-4 max-h-48 overflow-y-auto">
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                Search Results
+                            </label>
+                            <div className="space-y-1">
                                 {users.map(user => (
                                     <button
                                         key={user.id}
+                                        type="button"
                                         onClick={() => toggleUserSelection(user)}
-                                        className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
-                                            selectedUsers.some(u => u.id === user.id)
-                                                ? 'bg-blue-100 text-blue-900'
+                                        className={`w-full text-left px-3 py-2 rounded-md transition-colors
+                                            ${selectedUsers.some(u => u.id === user.id)
+                                                ? 'bg-blue-50 text-blue-700'
                                                 : 'hover:bg-gray-100'
-                                        }`}
+                                            }`}
                                     >
                                         {user.email}
                                     </button>
                                 ))}
                             </div>
-                        ) : searchTerm ? (
-                            <div className="text-center py-4 text-gray-500">
-                                No users found
-                            </div>
-                        ) : null}
-                    </div>
+                        </div>
+                    )}
 
-                    <div className="flex justify-end space-x-2">
+                    <div className="flex justify-end space-x-2 mt-6">
                         <button
                             type="button"
                             onClick={handleClose}
@@ -200,14 +226,24 @@ export default function NewChatModal({ isOpen, onClose, onChatCreated, isGroup =
                         </button>
                         <button
                             type="submit"
-                            disabled={!selectedUsers.length || !groupName.trim() || loading}
+                            disabled={!selectedUsers.length || (isGroup && !groupName.trim()) || loading}
                             className={`px-4 py-2 rounded-md ${
-                                !selectedUsers.length || !groupName.trim() || loading
+                                !selectedUsers.length || (isGroup && !groupName.trim()) || loading
                                     ? 'bg-gray-300 cursor-not-allowed'
                                     : 'bg-blue-600 text-white hover:bg-blue-700'
                             }`}
                         >
-                            {loading ? 'Creating...' : 'Create Group'}
+                            {loading ? (
+                                <span className="flex items-center">
+                                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                    </svg>
+                                    Creating...
+                                </span>
+                            ) : (
+                                `Create ${isGroup ? 'Group' : 'Chat'}`
+                            )}
                         </button>
                     </div>
                 </form>

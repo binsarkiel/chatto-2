@@ -3,36 +3,34 @@ import { io } from 'socket.io-client'
 let socket = null
 
 export const initSocket = (token) => {
-    if (socket) {
+    // If there's an existing socket, disconnect it first
+    if (socket?.connected) {
         socket.disconnect()
     }
 
-    socket = io('http://localhost:5000', {
+    // Create new socket connection
+    socket = io('/', {
+        path: '/socket.io',
         auth: { token }
     })
 
     socket.on('connect', () => {
-        console.log('Connected to socket server')
+        console.debug('[Socket] Connected to server')
         // Join all user's chat rooms
         socket.emit('join_chats')
     })
 
     socket.on('connect_error', (error) => {
-        console.error('Socket connection error:', error.message)
+        console.error('[Socket] Connection error:', error.message)
     })
 
     return socket
 }
 
-export const getSocket = () => {
-    if (!socket) {
-        throw new Error('Socket not initialized. Call initSocket first.')
-    }
-    return socket
-}
+export const getSocket = () => socket
 
 export const disconnectSocket = () => {
-    if (socket) {
+    if (socket?.connected) {
         socket.disconnect()
         socket = null
     }

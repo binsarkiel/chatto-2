@@ -1,119 +1,117 @@
 import { Server } from 'socket.io'
-import jwt from 'jsonwebtoken'
+import { verifyToken } from './utils/auth.js'
 import { query } from './db.js'
 
-let io
+let io = null
 
 export const initSocket = (server) => {
     io = new Server(server, {
         cors: {
-            origin: "http://localhost:5173", // Vite's default port
-            methods: ["GET", "POST"]
+            origin: 'http://localhost:5173',
+            methods: ['GET', 'POST']
         }
     })
 
-    // Middleware to authenticate socket connections
+    // Socket authentication middleware
     io.use(async (socket, next) => {
         try {
             const token = socket.handshake.auth.token
             if (!token) {
-                return next(new Error('Authentication error'))
+                return next(new Error('Authentication error: Token not provided'))
             }
 
-            const decoded = jwt.verify(
-                token,
-                process.env.JWT_SECRET || 'your-super-secret-key-change-this-in-production'
-            )
-
-            const result = await query('SELECT id, email FROM users WHERE id = $1', [decoded.userId])
-            if (result.rows.length === 0) {
-                return next(new Error('User not found'))
+            const user = await verifyToken(token)
+            if (!user) {
+                return next(new Error('Authentication error: Invalid token'))
             }
 
-            socket.user = result.rows[0]
+            socket.user = user
+            console.log('Socket authenticated for user:', user.email)
             next()
         } catch (error) {
+            console.error('Socket authentication error:', error)
             next(new Error('Authentication error'))
         }
     })
 
     io.on('connection', (socket) => {
-        console.log(`User connected: ${socket.user.email}`)
+        console.debug(`[Socket] User connected: ${socket.user.email} (${socket.id})`)
+
+        // Join user's personal room for direct notifications
+        socket.join(`user:${socket.user.id}`)
+        console.debug(`[Socket] User ${socket.user.email} joined personal room: user:${socket.user.id}`)
 
         // Join user to their chat rooms
         socket.on('join_chats', async () => {
             try {
+                console.debug(`[Socket] User ${socket.user.email} requesting to join their chat rooms`)
+                // Leave all previous chat rooms first
+                const rooms = [...socket.rooms]
+                rooms.forEach(room => {
+                    if (room.startsWith('chat:')) {
+                        socket.leave(room)
+                        console.debug(`[Socket] User ${socket.user.email} left room: ${room}`)
+                    }
+                })
+
+                // Get all chats where user is a participant
                 const result = await query(
                     'SELECT chat_id FROM chat_participants WHERE user_id = $1',
                     [socket.user.id]
                 )
-                result.rows.forEach(row => {
+
+                // Join each chat room
+                for (const row of result.rows) {
                     socket.join(`chat:${row.chat_id}`)
-                })
+                    console.debug(`[Socket] User ${socket.user.email} joined chat room: chat:${row.chat_id}`)
+                }
             } catch (error) {
-                console.error('Error joining chats:', error)
+                console.error('[Socket] Error joining chats:', error)
             }
         })
 
-        // Handle new message
-        socket.on('send_message', async (data) => {
-            try {
-                const { chat_id, content } = data
-                
-                // Verify user is participant of the chat
-                const participantCheck = await query(
-                    'SELECT 1 FROM chat_participants WHERE chat_id = $1 AND user_id = $2',
-                    [chat_id, socket.user.id]
-                )
-                
-                if (participantCheck.rows.length === 0) {
-                    socket.emit('error', { message: 'Not authorized to send message to this chat' })
-                    return
+        // Handle new chat room joining
+        socket.on('join_chat', ({ chat_id }) => {
+            console.debug(`[Socket] User ${socket.user.email} requesting to join chat: ${chat_id}`)
+            // Verify if user is participant of the chat before joining
+            query(
+                'SELECT 1 FROM chat_participants WHERE chat_id = $1 AND user_id = $2',
+                [chat_id, socket.user.id]
+            ).then(result => {
+                if (result.rows.length > 0) {
+                    socket.join(`chat:${chat_id}`)
+                    console.debug(`[Socket] User ${socket.user.email} joined chat room: chat:${chat_id}`)
+                } else {
+                    console.warn(`[Socket] User ${socket.user.email} attempted to join unauthorized chat: ${chat_id}`)
                 }
-
-                // Save message to database
-                const result = await query(
-                    'INSERT INTO messages (chat_id, sender_id, content) VALUES ($1, $2, $3) RETURNING id, created_at',
-                    [chat_id, socket.user.id, content]
-                )
-
-                const messageData = {
-                    id: result.rows[0].id,
-                    chat_id,
-                    sender_id: socket.user.id,
-                    sender_email: socket.user.email,
-                    content,
-                    created_at: result.rows[0].created_at
-                }
-
-                // Broadcast message to all participants in the chat
-                io.to(`chat:${chat_id}`).emit('new_message', messageData)
-            } catch (error) {
-                console.error('Error sending message:', error)
-                socket.emit('error', { message: 'Failed to send message' })
-            }
+            }).catch(error => {
+                console.error('[Socket] Error verifying chat participation:', error)
+            })
         })
 
-        // Handle typing status
-        socket.on('typing_start', (data) => {
-            socket.to(`chat:${data.chat_id}`).emit('user_typing', {
-                chat_id: data.chat_id,
+        // Handle typing indicators
+        socket.on('typing', ({ chat_id }) => {
+            console.debug(`[Socket] User ${socket.user.email} typing in chat: ${chat_id}`)
+            socket.to(`chat:${chat_id}`).emit('user_typing', {
+                chat_id,
                 user_email: socket.user.email
             })
         })
 
-        socket.on('typing_stop', (data) => {
-            socket.to(`chat:${data.chat_id}`).emit('user_stop_typing', {
-                chat_id: data.chat_id,
+        socket.on('stop_typing', ({ chat_id }) => {
+            console.debug(`[Socket] User ${socket.user.email} stopped typing in chat: ${chat_id}`)
+            socket.to(`chat:${chat_id}`).emit('user_stop_typing', {
+                chat_id,
                 user_email: socket.user.email
             })
         })
 
-        // Handle disconnect
         socket.on('disconnect', () => {
-            console.log(`User disconnected: ${socket.user.email}`)
+            console.debug(`[Socket] User disconnected: ${socket.user.email} (${socket.id})`)
         })
     })
+
+    return io
 }
 
 export const getIO = () => {

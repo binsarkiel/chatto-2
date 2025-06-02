@@ -17,18 +17,10 @@ export default function AppLayout({ children, onChatCreate }) {
         setModalOpen(true)
     }
 
-    const handleCreateChat = async (data) => {
+    const handleCreateChat = async (chat) => {
         try {
-            // TODO: Replace with actual API call
-            const mockResponse = {
-                id: Math.floor(Math.random() * 1000),
-                name: data.type === 'group' ? data.name : null,
-                is_group: data.type === 'group',
-                participants: data.participants
-            }
-            
             setModalOpen(false)
-            onChatCreate?.(mockResponse)
+            onChatCreate?.(chat)
         } catch (error) {
             console.error('Failed to create chat:', error)
         }
@@ -81,8 +73,8 @@ export default function AppLayout({ children, onChatCreate }) {
             <NewChatModal
                 isOpen={modalOpen}
                 onClose={() => setModalOpen(false)}
-                type={modalType}
-                onSubmit={handleCreateChat}
+                isGroup={modalType === 'group'}
+                onChatCreated={handleCreateChat}
             />
         </div>
     )

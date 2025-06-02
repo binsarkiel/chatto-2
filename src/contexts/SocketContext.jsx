@@ -10,31 +10,51 @@ export const SocketProvider = ({ children }) => {
     const [isConnected, setIsConnected] = useState(false)
 
     useEffect(() => {
-        if (user) {
+        let socketInstance = null
+
+        const setupSocket = () => {
+            if (!user) return
+
             const token = localStorage.getItem('token')
-            const socketInstance = initSocket(token)
-            
-            socketInstance.on('connect', () => {
-                setIsConnected(true)
-            })
-
-            socketInstance.on('disconnect', () => {
-                setIsConnected(false)
-            })
-
-            setSocket(socketInstance)
-
-            return () => {
-                disconnectSocket()
+            if (!token) {
+                console.warn('No token found for socket connection')
+                return
             }
-        } else {
-            if (socket) {
-                disconnectSocket()
+
+            // Only initialize if we don't have a connected socket
+            if (!socketInstance || !socketInstance.connected) {
+                socketInstance = initSocket(token)
+
+                socketInstance.on('connect', () => {
+                    console.debug('Socket connected')
+                    setIsConnected(true)
+                })
+
+                socketInstance.on('disconnect', () => {
+                    console.debug('Socket disconnected')
+                    setIsConnected(false)
+                })
+
+                socketInstance.on('connect_error', (error) => {
+                    console.error('Socket connection error:', error.message)
+                })
+
+                setSocket(socketInstance)
+            }
+        }
+
+        setupSocket()
+
+        // Cleanup function
+        return () => {
+            if (socketInstance) {
+                console.debug('Cleaning up socket connection')
+                socketInstance.disconnect()
                 setSocket(null)
                 setIsConnected(false)
             }
         }
-    }, [user])
+    }, [user]) // Only depend on user changes
 
     const sendMessage = (chatId, content) => {
         if (!socket) return
@@ -51,16 +71,16 @@ export const SocketProvider = ({ children }) => {
         socket.emit('typing_stop', { chat_id: chatId })
     }
 
+    const value = {
+        socket,
+        isConnected,
+        sendMessage,
+        startTyping,
+        stopTyping
+    }
+
     return (
-        <SocketContext.Provider 
-            value={{ 
-                socket,
-                isConnected,
-                sendMessage,
-                startTyping,
-                stopTyping
-            }}
-        >
+        <SocketContext.Provider value={value}>
             {children}
         </SocketContext.Provider>
     )
