@@ -32,11 +32,20 @@ const createTables = async () => {
             created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(chat_id, user_id)
         );
+
+        CREATE TABLE messages (
+            id SERIAL PRIMARY KEY,
+            chat_id INTEGER REFERENCES chats(id) ON DELETE CASCADE,
+            sender_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+            content TEXT NOT NULL,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
     `)
 }
 
 const dropTables = async () => {
     await query(`
+        DROP TABLE IF EXISTS messages CASCADE;
         DROP TABLE IF EXISTS chat_participants CASCADE;
         DROP TABLE IF EXISTS chats CASCADE;
         DROP TABLE IF EXISTS sessions CASCADE;
